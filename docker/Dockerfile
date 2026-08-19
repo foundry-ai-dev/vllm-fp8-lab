@@ -3,8 +3,11 @@
 # provide the NVIDIA driver via the container runtime.
 FROM python:3.12-slim
 
+# openssh is required by vast.ai's ssh launch mode — its launch script runs
+# ssh/sshd inside the container and hangs forever if they're missing.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && apt-get install -y --no-install-recommends \
+        curl ca-certificates openssh-server openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # vLLM >= 0.17 is required for Qwen3.8 support; hf_transfer speeds up the
