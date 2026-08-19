@@ -14,6 +14,13 @@ RUN apt-get update \
 # weight download at container start.
 RUN pip install --no-cache-dir "vllm==0.17.*" hf_transfer
 
+# tmux is expected by vast.ai's default /root/.bashrc (ssh sessions die with
+# exit 127 without it) and the runbook uses it. Separate layer AFTER the big
+# pip layer so cached hosts don't re-pull the ~6 GB vLLM layer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tmux \
+    && rm -rf /var/lib/apt/lists/*
+
 # Weights are downloaded at container start onto the instance volume
 # (HF_HOME), never baked into the image.
 ENV VLLM_MODEL=Qwen/Qwen3.8-27B-FP8 \
