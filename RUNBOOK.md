@@ -65,13 +65,21 @@ ssh -p <PORT> root@<IP>
 
 While it says `loading`, the host is pulling the ~6 GB image; first rental of
 this image on a given host takes a few minutes, later rentals hit the host cache.
+If the console then shows "Successfully loaded \<image\>" but the instance sits
+**inactive/stopped**, that's a known vast quirk — `vastai start instance
+<INSTANCE_ID>` kicks it (see Gotchas).
+
+End-to-end expectation for a fresh host: **15–25 min** from `create` to first
+token (image pull + 28 GB weights + model load), dominated by real download
+speed, which runs well below the listing (see Gotchas).
 
 ## 4. On the instance: weights + API
 
 ```bash
 nvidia-smi                     # sanity: 1x RTX 6000 Ada, 49 GB
 
-tmux                           # keep the server alive if ssh drops
+# You're already inside tmux — vast's /root/.bashrc auto-attaches a session on
+# login, so the server below survives ssh drops without any extra step.
 
 # Grab the weights (~28 GB → /workspace/hf, the instance NVMe volume).
 # HF_HOME and HF_HUB_ENABLE_HF_TRANSFER=1 are already set in the image env.
@@ -113,12 +121,14 @@ vastai show instance <INSTANCE_ID>       # ports column: 8000/tcp -> <PUBLIC_POR
 ```bash
 curl -s http://<IP>:<PUBLIC_PORT>/v1/models
 
-# one completion by hand (instruct-mode sampling per the model card):
+# one completion by hand (instruct sampling; thinking disabled so a small
+# max_tokens can't get eaten by the reasoning phase — see notes below):
 curl -s http://<IP>:<PUBLIC_PORT>/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen3.8-27b",
        "messages":[{"role":"user","content":"Say hello in five words."}],
-       "temperature":0.7, "top_p":0.8, "presence_penalty":1.5, "max_tokens":128}'
+       "temperature":0.7, "top_p":0.8, "presence_penalty":1.5, "max_tokens":128,
+       "chat_template_kwargs": {"enable_thinking": false}}'
 
 # or the repo's scripts:
 python scripts/test_chat.py --base-url http://<IP>:<PUBLIC_PORT>/v1
@@ -151,8 +161,8 @@ path exposes them as container env vars — see README):
 | Change | Flag |
 |---|---|
 | Different model | positional arg — any FP8 checkpoint ≤ ~40 GB |
-| Longer context (native max 262144) | `--max-model-len 262144` |
-| bf16 KV cache instead of fp8 | `--kv-cache-dtype auto` (halves context capacity) |
+| Longer context | `--max-model-len 131072` fits in the bf16-KV budget; the native 262144 realistically needs fp8 KV |
+| fp8 KV cache (doubles context capacity) | `--kv-cache-dtype fp8` — but this forces FlashInfer, which needs the full nvcc toolkit the slim image doesn't have (see Gotchas) |
 | More/less VRAM headroom | `--gpu-memory-utilization 0.90–0.95` |
 
 ## Gotchas (all hit in the field, all fixed in the image)
@@ -199,5 +209,8 @@ pip install "vllm==0.17.*" hf_transfer
 export HF_HOME=/workspace/hf HF_HUB_ENABLE_HF_TRANSFER=1
 ```
 
-and continue from step 4. The custom image only pre-bakes those two lines so
-cold starts are pull-and-go.
+and continue from step 4. A stock CUDA template already has gcc (and usually
+nvcc, so FlashInfer's JIT may even work there); on a bare slim base you'd also
+need `apt-get install gcc libc6-dev tmux openssh-server` — which is exactly
+what the custom image pre-bakes, along with the two lines above, so cold
+starts are pull-and-go.
