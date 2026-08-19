@@ -43,7 +43,8 @@ anonymously.
 ## Run it
 
 Requires the `vastai` CLI with an API key set, and vLLM ≥ 0.17 in the image
-(pinned in the Dockerfile).
+(pinned in the Dockerfile). Prefer doing it by hand? [RUNBOOK.md](RUNBOOK.md)
+walks through every step manually — rent, ssh, download weights, start the API.
 
 ```bash
 # 1. find a machine (cheapest 1x RTX 6000 Ada with fast download)
