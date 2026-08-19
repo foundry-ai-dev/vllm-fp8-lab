@@ -20,12 +20,14 @@ GitHub Actions ──build──▶ ghcr.io/foundry-ai-dev/vllm-fp8-lab
 
 | | BF16 | FP8 |
 |---|---|---|
-| 27B weights | ~54 GB — **doesn't fit** | ~28 GB |
-| KV cache headroom (at 0.92 util) | — | ~15 GB → 131K context (fp8 KV) |
+| 27B weights | ~54 GB — **doesn't fit** | ~28 GB (measured: 28.5 GiB loaded) |
+| KV cache headroom (at 0.92 util) | — | ~15 GB → 65K+ context (bf16 KV) |
 
 The RTX 6000 Ada (sm89) has hardware FP8, and vLLM serves FP8 checkpoints on it
-out of the box. FP8 KV cache (`--kv-cache-dtype fp8`) doubles context capacity
-versus bf16 KV; bump `MAX_MODEL_LEN` toward the native 262144 if you need it.
+out of the box. KV cache stays bf16 by default: fp8 KV forces vLLM onto the
+FlashInfer backend, which JIT-compiles CUDA at startup and needs the full nvcc
+toolkit this slim image intentionally omits (see RUNBOOK gotchas). Measured
+throughput: **~20 tok/s single-stream** — memory-bandwidth-bound for a dense 27B.
 
 ## The image
 
@@ -79,9 +81,10 @@ parser splits that into `reasoning_content` so API clients get clean answers.
 | Var | Default | Notes |
 |---|---|---|
 | `VLLM_MODEL` | `Qwen/Qwen3.8-27B-FP8` | any FP8 checkpoint that fits |
-| `MAX_MODEL_LEN` | `131072` | native max 262144 |
+| `MAX_MODEL_LEN` | `65536` | raise if KV headroom allows |
 | `GPU_UTIL` | `0.92` | gpu-memory-utilization |
-| `KV_DTYPE` | `fp8` | `auto` for bf16 KV |
+| `KV_DTYPE` | `auto` | `fp8` needs the nvcc toolkit (FlashInfer JIT) |
+| `VLLM_ATTENTION_BACKEND` | `FLASH_ATTN` | precompiled; FlashInfer would JIT |
 
 ## Observability
 

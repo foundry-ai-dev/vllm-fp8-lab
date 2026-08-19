@@ -77,13 +77,16 @@ tmux                           # keep the server alive if ssh drops
 # HF_HOME and HF_HUB_ENABLE_HF_TRANSFER=1 are already set in the image env.
 hf download Qwen/Qwen3.8-27B-FP8
 
-# Start the OpenAI-compatible API (same flags the entrypoint uses):
+# Start the OpenAI-compatible API (same flags the entrypoint uses).
+# FLASH_ATTN + bf16 KV avoids FlashInfer's JIT, which would need the full
+# CUDA toolkit — see Gotchas below.
+VLLM_ATTENTION_BACKEND=FLASH_ATTN \
 vllm serve Qwen/Qwen3.8-27B-FP8 \
   --host 0.0.0.0 --port 8000 \
   --served-model-name qwen3.8-27b \
-  --max-model-len 131072 \
+  --max-model-len 65536 \
   --gpu-memory-utilization 0.92 \
-  --kv-cache-dtype fp8 \
+  --kv-cache-dtype auto \
   --reasoning-parser qwen3 \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder
 ```
@@ -133,6 +136,30 @@ path exposes them as container env vars — see README):
 | Longer context (native max 262144) | `--max-model-len 262144` |
 | bf16 KV cache instead of fp8 | `--kv-cache-dtype auto` (halves context capacity) |
 | More/less VRAM headroom | `--gpu-memory-utilization 0.90–0.95` |
+
+## Gotchas (all hit in the field, all fixed in the image)
+
+- **"Successfully loaded \<image\>" but instance shows inactive/stopped** — vast
+  sometimes leaves a fresh instance stopped after the image load. `vastai start
+  instance <ID>` fixes it. Onstart runs on every start, not just the first.
+- **Custom images need `openssh-server`** — vast's ssh launch mode runs ssh
+  inside the container; without it the launch script loops forever
+  (`ssh: command not found` in `vastai logs`) and onstart never runs.
+- **vast's `/root/.bashrc` force-attaches tmux on login** — without tmux in the
+  image, every ssh session dies with exit 127. Even with it, non-interactive
+  commands (`ssh host 'cmd'`) get eaten by the auto-attach; for scripted access
+  force a TTY and pipe keystrokes: `printf 'cmd\rexit\r' | ssh -tt -p PORT root@IP`.
+- **Triton needs a C compiler at engine startup** — pip-installed vLLM on a
+  slim base dies with `Failed to find C compiler`; `gcc` + `libc6-dev` fix it.
+- **fp8 KV cache forces the FlashInfer backend**, which JIT-compiles CUDA and
+  needs the full nvcc toolkit (the pip `nvidia-cuda-nvcc-cu12` wheel ships only
+  `ptxas`, not `nvcc`). Without the toolkit, run `VLLM_ATTENTION_BACKEND=FLASH_ATTN`
+  with `--kv-cache-dtype auto` — FlashAttention is precompiled in the vllm wheel.
+- **Advertised bandwidth is optimistic** — a host listing 800 Mbps delivered
+  ~200 Mbps; budget download time accordingly.
+- **Expected performance**: ~20 tok/s single-stream for this dense 27B FP8 on a
+  6000 Ada — memory-bandwidth-bound (~34 tok/s theoretical ceiling). First
+  request after startup pays ~60 s of CUDA graph warmup.
 
 ## 7. Teardown — don't skip
 

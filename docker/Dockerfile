@@ -25,10 +25,14 @@ RUN apt-get update \
 
 # Weights are downloaded at container start onto the instance volume
 # (HF_HOME), never baked into the image.
+# FLASH_ATTN ships precompiled in the vllm wheel. The default backend for this
+# model (FlashInfer) JIT-compiles CUDA at startup and requires the full nvcc
+# toolkit, which this image deliberately does not carry.
 ENV VLLM_MODEL=Qwen/Qwen3.8-27B-FP8 \
     HF_HOME=/workspace/hf \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
-    VLLM_PORT=8000
+    VLLM_PORT=8000 \
+    VLLM_ATTENTION_BACKEND=FLASH_ATTN
 
 WORKDIR /workspace
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
