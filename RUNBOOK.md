@@ -125,6 +125,24 @@ python scripts/test_chat.py --base-url http://<IP>:<PUBLIC_PORT>/v1
 ./scripts/bench.sh http://<IP>:<PUBLIC_PORT>
 ```
 
+**Primary quick test (PowerShell).** Set the base URL once, then re-edit only
+`$q` between tests (up-arrow recalls the big line unchanged):
+
+```powershell
+$base = 'http://<IP>:<PUBLIC_PORT>'
+$q = 'What does BF16 mean when referencing a LLM?'
+$r = Invoke-RestMethod -Uri "$base/v1/chat/completions" -Method Post -ContentType 'application/json' -Body (@{ model = 'qwen3.8-27b'; messages = @(@{ role = 'user'; content = $q }); max_tokens = 4096; temperature = 0.7; top_p = 0.8; presence_penalty = 1.5; chat_template_kwargs = @{ enable_thinking = $false } } | ConvertTo-Json -Depth 5); $r.choices[0].message.content
+```
+
+Notes that save debugging time:
+- `chat_template_kwargs.enable_thinking = $false` gives fast direct answers.
+  Remove it for thinking mode, but then use `max_tokens` ≥ 2048 — the reasoning
+  happens first, and a small budget dies inside it, returning EMPTY content with
+  `finish_reason: "length"`. The reasoning text is in
+  `$r.choices[0].message.reasoning`.
+- Debug any odd response with:
+  `"finish: $($r.choices[0].finish_reason) | tokens: $($r.usage.completion_tokens)"`
+
 ## 6. Knobs
 
 All of these are just vllm serve flags when running manually (the automated
