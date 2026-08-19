@@ -14,11 +14,13 @@ RUN apt-get update \
 # weight download at container start.
 RUN pip install --no-cache-dir "vllm==0.17.*" hf_transfer
 
-# tmux is expected by vast.ai's default /root/.bashrc (ssh sessions die with
-# exit 127 without it) and the runbook uses it. Separate layer AFTER the big
-# pip layer so cached hosts don't re-pull the ~6 GB vLLM layer.
+# Runtime deps a bare slim base is missing, kept as a layer AFTER the big pip
+# layer so cached hosts don't re-pull the ~6 GB vLLM layer:
+# - tmux: vast.ai's default /root/.bashrc force-attaches it on ssh login
+# - gcc + libc6-dev: triton JIT-compiles kernel launchers at engine startup
+#   and dies with "Failed to find C compiler" without them
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tmux \
+    && apt-get install -y --no-install-recommends tmux gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Weights are downloaded at container start onto the instance volume
