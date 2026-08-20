@@ -20,8 +20,9 @@ RUN pip install --no-cache-dir "vllm==0.17.*" hf_transfer
 # - gcc + libc6-dev: triton JIT-compiles kernel launchers at engine startup
 #   and dies with "Failed to find C compiler" without them
 # - jq: extracting fields from API responses when curl-testing on the instance
+# - nano: on-instance edits and reading the vllm source (slim base has no editor)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tmux gcc libc6-dev jq \
+    && apt-get install -y --no-install-recommends tmux gcc libc6-dev jq nano \
     && rm -rf /var/lib/apt/lists/*
 
 # Weights are downloaded at container start onto the instance volume
