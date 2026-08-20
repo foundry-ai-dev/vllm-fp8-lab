@@ -19,8 +19,9 @@ RUN pip install --no-cache-dir "vllm==0.17.*" hf_transfer
 # - tmux: vast.ai's default /root/.bashrc force-attaches it on ssh login
 # - gcc + libc6-dev: triton JIT-compiles kernel launchers at engine startup
 #   and dies with "Failed to find C compiler" without them
+# - jq: extracting fields from API responses when curl-testing on the instance
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tmux gcc libc6-dev \
+    && apt-get install -y --no-install-recommends tmux gcc libc6-dev jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Weights are downloaded at container start onto the instance volume
