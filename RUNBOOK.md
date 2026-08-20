@@ -40,10 +40,10 @@ stick around. Note the offer `ID` you want.
 ## 2. Rent it (manual mode — no autostart)
 
 ```bash
-vastai create instance <OFFER_ID> \
-  --image ghcr.io/foundry-ai-dev/vllm-fp8-lab:latest \
-  --disk 120 \
-  --env '-p 8000:8000' \
+vastai create instance <OFFER_ID> `
+  --image ghcr.io/foundry-ai-dev/vllm-fp8-lab:latest `
+  --disk 120 `
+  --env '-p 8000:8000' `
   --ssh --direct
 ```
 
@@ -57,7 +57,7 @@ The command prints `'new_contract': <INSTANCE_ID>` — that's your instance ID.
 ## 3. Wait for boot, then connect
 
 ```bash
-vastai show instance <INSTANCE_ID>       # status: loading → running
+vastai show instances       # status: loading → running
 vastai ssh-url <INSTANCE_ID>             # → ssh://root@IP:PORT
 
 ssh -p <PORT> root@<IP>
@@ -100,8 +100,11 @@ vllm serve Qwen/Qwen3.8-27B-FP8 \
 ```
 
 Model load takes a couple of minutes after the download; you're up when the log
-prints `Application startup complete`. Detach from tmux with `Ctrl-b d`
-(reattach later with `tmux attach`).
+prints `Application startup complete`. The server owns this tmux window's
+foreground (don't `Ctrl-c` — that kills it). To test without leaving the
+instance, open a second tmux window with `Ctrl-b c` (`Ctrl-b n` cycles back to
+the server logs). Or detach entirely with `Ctrl-b d` and reattach later with
+`tmux attach`.
 
 Quick check from inside the instance:
 
@@ -109,6 +112,22 @@ Quick check from inside the instance:
 curl -s localhost:8000/v1/models
 curl -s localhost:8000/metrics | grep '^vllm:' | head
 ```
+
+One completion with just the answer text (jq is baked into the image; `-r`
+unquotes the string and renders the `\n`s):
+
+```bash
+curl -s http://localhost:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3.8-27b",
+       "messages":[{"role":"user","content":"Say hello in five words."}],
+       "temperature":0.7, "top_p":0.8, "presence_penalty":1.5, "max_tokens":512,
+       "chat_template_kwargs": {"enable_thinking": false}}' \
+  | jq -r '.choices[0].message.content'
+```
+
+If the answer cuts off mid-sentence, it hit `max_tokens` — drop the jq filter
+to see the raw JSON (`finish_reason: "length"` confirms it) and raise the cap.
 
 ## 5. Test from your laptop
 
